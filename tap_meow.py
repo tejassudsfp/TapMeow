@@ -2,6 +2,7 @@
 """Tap your MacBook, get a meow. Harder tap = higher pitch.
 Calibrated from actual mic data. Only triggers on percussive taps."""
 
+import os
 import numpy as np
 import sounddevice as sd
 import subprocess
@@ -10,7 +11,7 @@ import time
 import wave
 from collections import deque
 
-MEOW_PATH = "/Users/tejassudarshan/Downloads/mixkit-sweet-kitty-meow-93.wav"
+MEOW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meow.wav")
 THRESHOLD = 0.15        # only hard taps
 COOLDOWN = 1.5          # 1.5 sec cooldown so it finishes meowing before retriggering
 SAMPLE_RATE = 44100
