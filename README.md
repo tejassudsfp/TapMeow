@@ -1,18 +1,12 @@
 # TapMeow
 
-Tap your MacBook, get a meow. Two ways to run it.
+Tap your MacBook, hear a meow.
 
-## What it does
+Uses your built-in mic to detect percussive taps on the laptop body. Filters out speech, music, and ambient noise. Only reacts to sharp physical taps.
 
-- Uses your MacBook's built-in mic to detect percussive taps
-- Filters out speech and ambient noise, only responds to sharp taps
-- Tap your laptop, hear a meow
+https://github.com/user-attachments/assets/placeholder
 
-## Run locally
-
-### Option 1: Menu bar app (recommended)
-
-Cat emoji sits in your macOS menu bar. Click to start/pause.
+## Quick start
 
 ```bash
 git clone https://github.com/tejassudsfp/TapMeow.git
@@ -21,59 +15,101 @@ pip3 install numpy sounddevice rumps
 python3 tap_meow_app.py
 ```
 
-- 🐱 appears in your menu bar
-- Click it, hit "Start Listening"
-- Tap your MacBook, hear a meow
-- Click "Pause" to stop, "Quit" to exit
+macOS will ask for microphone permission. Grant it.
 
-### Option 2: Terminal script
+## Two ways to run
 
-Runs in your terminal. No menu bar, no GUI. Ctrl+C to stop.
+### Menu bar app
 
 ```bash
-git clone https://github.com/tejassudsfp/TapMeow.git
-cd TapMeow
+pip3 install numpy sounddevice rumps
+python3 tap_meow_app.py
+```
+
+A cat emoji appears in your menu bar. Click it to start/pause listening. No Dock icon, stays out of your way.
+
+| State | Icon | Behavior |
+|---|---|---|
+| Paused | 🐱 | Not listening |
+| Listening | 😺 | Tap to meow |
+
+> **Known issue (macOS Tahoe):** macOS replaces the cat emoji with a system mic indicator when listening starts. The menu bar icon and menu become inaccessible. Use `pkill -f tap_meow_app` to stop. This is a macOS privacy UI limitation, not a bug. Working on a fix. Terminal mode works perfectly.
+
+### Terminal mode
+
+```bash
 pip3 install numpy sounddevice
 python3 tap_meow.py
 ```
 
-Starts listening immediately. Tap your MacBook, see "MEOW!" in the terminal and hear the sound.
+Starts listening immediately. Prints `MEOW!` on each tap. `Ctrl+C` to quit.
 
 ## Build a shareable .app
 
-Bundle it into a standalone macOS app you can AirDrop to friends.
+Bundle into a standalone macOS app. No Python needed on the recipient's machine.
 
 ```bash
 pip3 install pyinstaller
 pyinstaller TapMeow.spec
 ```
 
-Output at `dist/TapMeow.app`. To share:
+App lands in `dist/TapMeow.app`.
+
+**Share via AirDrop:**
 
 ```bash
 zip -r TapMeow.zip dist/TapMeow.app
 ```
 
-Recipients need to right-click > Open the first time (not App Store signed).
+Recipients right-click > Open the first time (bypasses Gatekeeper).
 
-Apple Silicon only. Won't run on Intel Macs.
+> Built for Apple Silicon. Won't run on Intel Macs.
 
-## Files
+## How it works
 
-| File | What |
-|---|---|
-| `tap_meow_app.py` | Menu bar app (rumps) |
-| `tap_meow.py` | Terminal script |
-| `meow.wav` | The meow sound |
-| `make_icons.py` | Generates app icon from cat emoji |
-| `icon.icns` | Pre-built app icon |
-| `TapMeow.spec` | PyInstaller build spec |
+1. Opens a 44.1kHz audio stream from the built-in mic
+2. Tracks background noise level over a sliding window
+3. Three-layer tap detection filters out speech and ambient noise:
+   - **Spectral flatness**: taps are broadband (flat spectrum), speech is narrowband
+   - **Attack sharpness**: taps rise to peak in 1-5 samples, speech builds gradually
+   - **Duration check**: if loud for 3+ consecutive blocks, it's speech not a tap
+4. Plays `meow.wav` with a 1.5s cooldown between triggers
+5. Skips 60 audio blocks after each tap to ignore the decay
+
+## Regenerate the app icon
+
+The cat emoji icon is pre-built (`icon.icns`). To regenerate:
+
+```bash
+pip3 install Pillow
+python3 make_icons.py
+```
+
+Uses macOS native rendering (Swift/AppKit) for full-color emoji.
+
+## Project structure
+
+```
+TapMeow/
+├── tap_meow_app.py   # Menu bar app (rumps)
+├── tap_meow_worker.py # Audio worker (separate process for menu bar app)
+├── tap_meow.py       # Terminal script
+├── meow.wav          # The meow sound
+├── TapMeow.spec      # PyInstaller build config
+├── make_icons.py     # Icon generator
+├── icon.icns         # App icon (pre-built)
+├── icon_512.png      # 512x512 source icon
+├── menubar_icon.png  # 22x22 menu bar icon
+├── CLAUDE.md         # Claude Code project context
+├── LICENSE           # MIT
+└── README.md
+```
 
 ## Requirements
 
 - macOS (Apple Silicon)
 - Python 3.10+
-- Microphone access (macOS will prompt on first run)
+- Microphone access
 
 ## License
 

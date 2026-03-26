@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Tap your MacBook, get a meow. Only triggers on physical taps, not speech."""
+"""Audio worker for TapMeow. Runs as a separate process.
+Handles mic input, tap detection, and meow playback.
+Stops cleanly on SIGINT."""
 
 import os
 import numpy as np
@@ -9,22 +11,20 @@ import time
 import wave
 from collections import deque
 
-MEOW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meow.wav")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MEOW_PATH = os.path.join(SCRIPT_DIR, "meow.wav")
+
 SAMPLE_RATE = 44100
 BLOCKSIZE = 512
 COOLDOWN = 1.5
-
-# Tap detection thresholds
 PEAK_THRESHOLD = 0.15
 SPIKE_RATIO = 8.0
 FLATNESS_THRESHOLD = 0.3
 DURATION_BLOCKS = 3
-
 BG_WINDOW = 40
 DECAY_BLOCKS = 60
 
 # Load meow
-print("Loading meow...")
 with wave.open(MEOW_PATH, "rb") as wf:
     raw = wf.readframes(wf.getnframes())
     width = wf.getsampwidth()
@@ -50,7 +50,6 @@ loud_streak = 0
 
 
 def spectral_flatness(block):
-    """Taps are broadband (~0.3-0.8), speech is narrowband (~0.05-0.15)."""
     fft = np.abs(np.fft.rfft(block))
     fft = fft[1:] + 1e-10
     geo_mean = np.exp(np.mean(np.log(fft)))
@@ -59,7 +58,6 @@ def spectral_flatness(block):
 
 
 def attack_sharpness(block):
-    """Taps rise in 1-5 samples, speech rises gradually."""
     abs_block = np.abs(block)
     peak_idx = np.argmax(abs_block)
     peak_val = abs_block[peak_idx]
@@ -75,16 +73,14 @@ def attack_sharpness(block):
     return max(0.0, 1.0 - (rise_samples / 50.0))
 
 
-def play(intensity):
+def play_meow():
     global last_trigger
     with lock:
         now = time.time()
         if now - last_trigger < COOLDOWN:
             return
         last_trigger = now
-
     sd.play(meow, SAMPLE_RATE)
-    print(f"  MEOW! (peak: {intensity:.3f})")
 
 
 def callback(indata, frames, time_info, status):
@@ -97,12 +93,10 @@ def callback(indata, frames, time_info, status):
     if skip_blocks > 0:
         skip_blocks -= 1
         return
-
     if peak < PEAK_THRESHOLD:
         bg_levels.append(rms)
         loud_streak = 0
         return
-
     if len(bg_levels) < 10:
         bg_levels.append(rms)
         return
@@ -110,7 +104,6 @@ def callback(indata, frames, time_info, status):
     bg_avg = np.mean(bg_levels)
     if bg_avg < 0.0001:
         bg_avg = 0.0001
-
     ratio = peak / bg_avg
 
     if ratio < SPIKE_RATIO:
@@ -118,7 +111,6 @@ def callback(indata, frames, time_info, status):
         loud_streak = 0
         return
 
-    # Loud and spiky, but is it a tap?
     loud_streak += 1
     if loud_streak > DURATION_BLOCKS:
         bg_levels.append(rms)
@@ -132,22 +124,17 @@ def callback(indata, frames, time_info, status):
     if sharpness < 0.5:
         return
 
-    # It's a tap
     skip_blocks = DECAY_BLOCKS
     loud_streak = 0
-    threading.Thread(target=play, args=(peak,), daemon=True).start()
+    threading.Thread(target=play_meow, daemon=True).start()
 
-
-print()
-print("  TAP YOUR MACBOOK TO MEOW")
-print("  Ctrl+C to stop")
-print()
 
 try:
     with sd.InputStream(
-        callback=callback, channels=1, samplerate=SAMPLE_RATE, blocksize=BLOCKSIZE
+        callback=callback, channels=1,
+        samplerate=SAMPLE_RATE, blocksize=BLOCKSIZE,
     ):
         while True:
             time.sleep(0.1)
 except KeyboardInterrupt:
-    print("\nBye!")
+    pass
